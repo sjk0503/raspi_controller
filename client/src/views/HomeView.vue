@@ -2,51 +2,119 @@
 import { ref } from "vue";
 import axios from "axios";
 
-const count = ref(0); // 사람 수
-const imageBase64 = ref(""); // Base64 인코딩된 이미지
-const fileName = ref(""); // 업로드된 파일 이름
+// 기본값 상수
+const INITIAL_CROSSWALK_TIMER = 100;
+const CROSSWALK_GREEN_TIME = 30;
+const CAR_YELLOW_TIME = 10;
 
-// 파일을 Base64로 변환하는 함수
-const convertToBase64 = (file) => {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = () => {
-      const base64String = reader.result.split(",")[1]; // "data:image/png;base64,..." 제거
-      console.log("Base64 코드:", base64String); // 콘솔에 출력
-      resolve(base64String);
-    };
-    reader.onerror = (error) => reject(error);
-  });
+// 신호 상태
+const crosswalkSignal = ref("red");
+const carSignal = ref("green");
+
+// 신호 카운트다운
+const crosswalkTimer = ref(INITIAL_CROSSWALK_TIMER);
+
+// 사람 수 카운트
+const peopleCount = ref(0);
+const prevPeopleCount = ref(0);
+
+// 타이머 실행 상태
+const isRunning = ref(false);
+let timer = null;
+
+// 이미지 파일 및 Base64 변환
+const imageFile = ref(null);
+const base64Image = ref("");
+
+// 🚦 신호 시작
+const startSignal = () => {
+  if (isRunning.value) return;
+  isRunning.value = true;
+  runTimer();
 };
 
-// 파일 선택 이벤트 핸들러
-const handleFileUpload = async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
+// 🚦 타이머 실행
+const runTimer = () => {
+  timer = setInterval(() => {
+    if (crosswalkSignal.value === "red") {
+      if (crosswalkTimer.value > 10) {
+        crosswalkTimer.value--;
+      } else if (crosswalkTimer.value > 0 && crosswalkTimer.value <= CAR_YELLOW_TIME) {
+        carSignal.value = "yellow";
+        crosswalkTimer.value--;
+      } else {
+        crosswalkSignal.value = "green";
+        carSignal.value = "red";
+        crosswalkTimer.value = CROSSWALK_GREEN_TIME;
+      }
+    } else if (crosswalkSignal.value === "green") {
+      if (crosswalkTimer.value > 0) {
+        crosswalkTimer.value--;
+      } else {
+        crosswalkSignal.value = "red";
+        carSignal.value = "green";
+        crosswalkTimer.value = INITIAL_CROSSWALK_TIMER;
+        peopleCount.value = 0;
+        prevPeopleCount.value = 0;
+      }
+    }
+  }, 1000);
+};
 
-  fileName.value = file.name; // 파일 이름 저장
-
-  try {
-    imageBase64.value = await convertToBase64(file);
-  } catch (error) {
-    console.error("이미지 변환 오류:", error);
+// 🚦 신호 정지
+const stopSignal = () => {
+  if (timer) {
+    clearInterval(timer);
+    timer = null;
+    isRunning.value = false;
   }
 };
 
-// API 호출 함수
+// 🚦 신호 초기화
+const resetSignal = () => {
+  stopSignal();
+  crosswalkSignal.value = "red";
+  carSignal.value = "green";
+  crosswalkTimer.value = INITIAL_CROSSWALK_TIMER;
+  peopleCount.value = 0;
+  prevPeopleCount.value = 0;
+};
+
+// 🖼️ 이미지 선택 및 Base64 변환
+const onImageChange = (event) => {
+  const file = event.target.files[0];
+  if (file) {
+    imageFile.value = file;
+    convertToBase64(file);
+  }
+};
+
+const convertToBase64 = (file) => {
+  const reader = new FileReader();
+  reader.readAsDataURL(file);
+  reader.onload = () => {
+    base64Image.value = reader.result.split(",")[1];
+  };
+};
+
+// 🖼️ 이미지 분석
 const detectPeople = async () => {
-  if (!imageBase64.value) {
-    alert("먼저 이미지를 업로드하세요!");
+  if (!base64Image.value) {
+    alert("이미지를 먼저 업로드하세요!");
     return;
   }
-
   try {
-    const response = await axios.post("http://localhost:8000/api/v1/detect", {
-      base64_image: imageBase64.value,
+    const response = await axios.post("http://127.0.0.1:8000/api/v1/detect", {
+      base64_image: base64Image.value,
     });
 
-    count.value = response.data.num_people; // 사람 수 업데이트
+    const detectedPeople = response.data.num_people;
+    const newPeople = detectedPeople - prevPeopleCount.value;
+    if (newPeople > 0 && crosswalkSignal.value === "red" && crosswalkTimer.value > 10) {
+      crosswalkTimer.value = Math.max(10, crosswalkTimer.value - newPeople * 10);
+    }
+    prevPeopleCount.value = detectedPeople;
+    peopleCount.value = detectedPeople;
   } catch (error) {
     console.error("API 호출 오류:", error);
   }
@@ -55,51 +123,134 @@ const detectPeople = async () => {
 
 <template>
   <div class="container">
-    <h1>사람 수: {{ count }}</h1>
+    <h1 class="title">🚦 스마트 신호등 시스템</h1>
 
-    <!-- 파일 업로드 -->
-    <input type="file" @change="handleFileUpload" accept="image/*" />
+    <div class="signals">
+      <div class="signal-box crosswalk">
+        <p>횡단보도 신호</p>
+        <div class="light-box">
+          <div class="light red" :class="{ active: crosswalkSignal === 'red' }"></div>
+          <div class="light green" :class="{ active: crosswalkSignal === 'green' }"></div>
+        </div>
+        <p class="timer">{{ crosswalkTimer }}</p>
+      </div>
 
-    <!-- 파일 이름 표시 -->
-    <p v-if="fileName">파일 선택됨: {{ fileName }}</p>
+      <div class="signal-box car">
+        <p>자동차 신호</p>
+        <div class="light-box">
+          <div class="light green" :class="{ active: carSignal === 'green' }"></div>
+          <div class="light yellow" :class="{ active: carSignal === 'yellow' }"></div>
+          <div class="light red" :class="{ active: carSignal === 'red' }"></div>
+        </div>
+      </div>
+    </div>
 
-    <!-- 변환 버튼 -->
-    <button @click="detectPeople" :disabled="!imageBase64">분석 시작</button>
+    <div class="controls">
+      <button @click="startSignal" :disabled="isRunning" class="btn start">신호 시작</button>
+      <button @click="stopSignal" class="btn stop">신호 정지</button>
+      <button @click="resetSignal" class="btn reset">신호 초기화</button>
+    </div>
 
-    <!-- 이미지 미리보기 -->
-    <img v-if="imageBase64" :src="'data:image/jpeg;base64,' + imageBase64" alt="Uploaded Image" class="preview" />
+    <div class="image-section">
+      <input type="file" @change="onImageChange" accept="image/*" class="file-input">
+      <button @click="detectPeople" class="btn analyze">이미지 분석</button>
+      <div v-if="base64Image" class="image-preview">
+        <img :src="'data:image/jpeg;base64,' + base64Image" alt="업로드된 이미지">
+      </div>
+    </div>
+
+    <p class="people-count">현재 감지된 사람 수: {{ peopleCount }} 명</p>
   </div>
 </template>
 
 <style scoped>
 .container {
-  text-align: center;
+  max-width: 600px;
+  margin: 30px auto;
   padding: 20px;
+  text-align: center;
+  background: #f9f9f9;
+  border-radius: 15px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
-input {
+.title {
+  font-size: 2rem;
+  margin-bottom: 20px;
+}
+
+.signals {
+  display: flex;
+  justify-content: space-around;
+  margin: 20px 0;
+}
+
+.signal-box {
+  text-align: center;
+}
+
+.light-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.light {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #333;
+  transition: 0.3s;
+  box-shadow: none;
+}
+
+.red.active {
+  background: red;
+  box-shadow: 0 0 10px red;
+}
+
+.green.active {
+  background: green;
+  box-shadow: 0 0 10px green;
+}
+
+.yellow.active {
+  background: orange;
+  box-shadow: 0 0 10px orange;
+}
+
+.timer {
+  font-size: 1.2rem;
+  margin-top: 10px;
+}
+
+.controls {
+  margin: 20px 0;
+}
+
+.btn {
   margin: 10px;
-}
-
-button {
-  margin-top: 10px;
-  padding: 10px 15px;
-  font-size: 16px;
-  cursor: pointer;
-  border: none;
-  background-color: #007bff;
-  color: white;
+  padding: 10px 20px;
+  font-size: 1rem;
   border-radius: 5px;
+  cursor: pointer;
 }
 
-button:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
+.start { background: #28a745; color: white; }
+.stop { background: #dc3545; color: white; }
+.reset { background: #ffc107; color: white; }
+.analyze { background: #007bff; color: white; }
+
+.image-preview img {
+  max-width: 100%;
+  border-radius: 10px;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
 }
 
-.preview {
-  margin-top: 10px;
-  max-width: 300px;
-  border-radius: 8px;
+.people-count {
+  font-size: 1.2rem;
+  font-weight: bold;
 }
 </style>
