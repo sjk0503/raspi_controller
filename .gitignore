@@ -1,6 +1,2 @@
-node_modules
 .DS_Store
-.env.local
-venv
-yolov8n.pt
-__pycache__
+*.local
