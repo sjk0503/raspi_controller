@@ -111,7 +111,7 @@ const detectPeople = async () => {
     const detectedPeople = response.data.num_people;
     const newPeople = detectedPeople - prevPeopleCount.value;
     if (newPeople > 0 && crosswalkSignal.value === "red" && crosswalkTimer.value > 10) {
-      crosswalkTimer.value = Math.max(10, crosswalkTimer.value - newPeople * 10);
+      crosswalkTimer.value = Math.max(10, parseInt(crosswalkTimer.value * Math.pow(0.9, newPeople)));
     }
     prevPeopleCount.value = detectedPeople;
     peopleCount.value = detectedPeople;
@@ -152,10 +152,10 @@ const detectPeople = async () => {
     </div>
 
     <div class="image-section">
-      <input type="file" @change="onImageChange" accept="image/*" class="file-input">
+      <input type="file" @change="onImageChange" accept="image/*" class="file-input" />
       <button @click="detectPeople" class="btn analyze">이미지 분석</button>
       <div v-if="base64Image" class="image-preview">
-        <img :src="'data:image/jpeg;base64,' + base64Image" alt="업로드된 이미지">
+        <img :src="'data:image/jpeg;base64,' + base64Image" alt="업로드된 이미지" />
       </div>
     </div>
 
@@ -238,15 +238,27 @@ const detectPeople = async () => {
   cursor: pointer;
 }
 
-.start { background: #28a745; color: white; }
-.stop { background: #dc3545; color: white; }
-.reset { background: #ffc107; color: white; }
-.analyze { background: #007bff; color: white; }
+.start {
+  background: #28a745;
+  color: white;
+}
+.stop {
+  background: #dc3545;
+  color: white;
+}
+.reset {
+  background: #ffc107;
+  color: white;
+}
+.analyze {
+  background: #007bff;
+  color: white;
+}
 
 .image-preview img {
   max-width: 100%;
   border-radius: 10px;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
 }
 
 .people-count {
