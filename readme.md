@@ -18,25 +18,17 @@
     npm i
 
 #### `./yolo`
-    ```
     pip install -r ./requirements.txt
-    ```
 
 ### 실행
 
 #### `./client`
-    ```
     npm run dev
-    ```
 
 #### `./server`
-    ```
     node ./index.mjs
     # OR
     nodemon ./index.mjs
-    ```
 
 #### `./yolo`
-    ```
     uvicorn main:app --reload --host 0.0.0.0 --port 8000;
-    ```
