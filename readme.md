@@ -15,30 +15,30 @@
 ### 필요한 패키지 설치
 
 #### `./client`, `./server`
-    ```zsh
+    ```
     npm i
     ```
 
 #### `./yolo`
-    ```zsh
+    ```
     pip install -r ./requirements.txt
     ```
 
 ### 실행
 
 #### `./client`
-    ```zsh
+    ```
     npm run dev
     ```
 
 #### `./server`
-    ```zsh
+    ```
     node ./index.mjs
     # OR
     nodemon ./index.mjs
     ```
 
 #### `./yolo`
-    ```zsh
+    ```
     uvicorn main:app --reload --host 0.0.0.0 --port 8000;
     ```
