@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, watch } from "vue";
+import { ref, onMounted } from "vue";
 import axios from "axios";
 import { Chart } from "chart.js/auto";
 
@@ -118,17 +118,17 @@ const convertToBase64 = (file) => {
   };
 };
 
-// 🖼️ 이미지 분석 API 호출 (사람 수에 따라 횡단보도 빨간불 시간 감소)
+// 🖼️ 이미지 분석 API 호출 및 DB에 데이터 저장
 const detectPeople = async () => {
   if (!base64Image.value) {
     alert("이미지를 먼저 업로드하세요!");
     return;
   }
   try {
+    // 이미지 분석 API 호출 (포트 8000)
     const response = await axios.post("http://127.0.0.1:8000/api/v1/detect", {
       base64_image: base64Image.value,
     });
-
     const detectedPeople = response.data.num_people;
     const newPeople = detectedPeople - prevPeopleCount.value;
     if (newPeople > 0 && crosswalkSignal.value === "red" && crosswalkTimer.value > 10) {
@@ -136,49 +136,61 @@ const detectPeople = async () => {
     }
     prevPeopleCount.value = detectedPeople;
     peopleCount.value = detectedPeople;
+
+    // DB에 사람 수 저장 (포트 9000)
+    await axios.post("http://127.0.0.1:9000/api/v1/smart_blinker", {
+      people_count: detectedPeople,
+    });
+
+    // 그래프가 열려 있다면 자동으로 최신화
+    if (showChart.value) {
+      setTimeout(createChart, 100); // DOM 업데이트 후 차트 새로고침
+    }
   } catch (error) {
     console.error("API 호출 오류:", error);
   }
 };
 
 // 차트 생성 함수 (DB API에서 데이터를 가져와 차트를 그림)
+// 데이터를 24시간 단위로 그룹화하여, 각 시간대(0시~23시)별 총 사람 수를 표시
 const createChart = async () => {
   try {
     const response = await axios.get("http://127.0.0.1:9000/api/v1/smart_blinker");
-    // API에서 반환한 데이터를 시간 순으로 정렬 (오름차순)
-    const data = response.data.sort((a, b) => new Date(a.detected_time) - new Date(b.detected_time));
-    const labels = data.map((d) => d.detected_time);
-    const counts = data.map((d) => d.people_count);
+    // API에서 반환한 데이터는 { hour: 숫자, total_people: 숫자 } 형태의 배열
+    const data = response.data;
+    const labels = data.map((d) => d.hour + "시");
+    const counts = data.map((d) => d.total_people);
 
     const ctx = document.getElementById("peopleChart").getContext("2d");
-    // 기존 차트 인스턴스가 있으면 제거
     if (chartInstance) chartInstance.destroy();
 
     chartInstance = new Chart(ctx, {
       type: "line",
       data: {
         labels: labels,
-        datasets: [{
-          label: "사람 수",
-          data: counts,
-          borderColor: "#007bff",
-          backgroundColor: "rgba(0, 123, 255, 0.2)",
-          tension: 0.3,
-        }]
+        datasets: [
+          {
+            label: "사람 수",
+            data: counts,
+            borderColor: "#007bff",
+            backgroundColor: "rgba(0, 123, 255, 0.2)",
+            tension: 0.3,
+          },
+        ],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
         scales: {
           x: {
-            title: { display: true, text: "시간" }
+            title: { display: true, text: "시간" },
           },
           y: {
             title: { display: true, text: "사람 수" },
             beginAtZero: true,
-          }
-        }
-      }
+          },
+        },
+      },
     });
   } catch (error) {
     console.error("차트 데이터 로드 오류:", error);
@@ -188,20 +200,16 @@ const createChart = async () => {
 // 그래프 분석 버튼 클릭 시 토글
 const toggleChart = () => {
   showChart.value = !showChart.value;
-  // 그래프가 보일 때 차트 생성
   if (showChart.value) {
-    // DOM 업데이트 후 차트 생성을 위해 약간의 딜레이
     setTimeout(createChart, 100);
   }
 };
-
-// 더이상 임의의 더미 데이터는 사용하지 않음 (나중에 DB API로 대체)
 </script>
 
 <template>
   <div class="container">
     <h1 class="title">🚦 스마트 신호등 시스템</h1>
-    
+
     <div class="signals">
       <div class="signal-box crosswalk">
         <p>횡단보도 신호</p>
@@ -229,10 +237,10 @@ const toggleChart = () => {
     </div>
 
     <div class="image-section">
-      <input type="file" @change="onImageChange" accept="image/*" class="file-input">
+      <input type="file" @change="onImageChange" accept="image/*" class="file-input" />
       <button @click="detectPeople" class="btn analyze">이미지 분석</button>
       <div v-if="base64Image" class="image-preview">
-        <img :src="'data:image/jpeg;base64,' + base64Image" alt="업로드된 이미지">
+        <img :src="'data:image/jpeg;base64,' + base64Image" alt="업로드된 이미지" />
       </div>
     </div>
 
