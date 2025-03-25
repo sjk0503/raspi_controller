@@ -1,5 +1,7 @@
 # 스마트 신호등 컨트롤러
 
+![Image](https://github.com/user-attachments/assets/afab2df2-71e2-4e59-9c05-ee6c10e43edb)
+
 ## 목적
 - 횡단보도에서 기다리는 시간을 효율적으로 개선하기 위해 기다리는 사람 수에 따라 신호 시간을 조절한다.
 
